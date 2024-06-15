@@ -1,5 +1,5 @@
 # Name: VirtualTableDump.py
-# Version: 3.8.2
+# Version: 3.8.1
 # Author: RenardDev (zeze839@gmail.com)
 
 # IDA
@@ -33,6 +33,16 @@ MAX_EA = DATABASE_INFO.max_ea
 FILE_TYPE = DATABASE_INFO.filetype
 IS_64 = DATABASE_INFO.is_64bit()
 
+def removeprefix(text, prefix):
+    if text.startswith(prefix):
+        return text[len(prefix):]
+    return text
+
+def removesuffix(text, suffix):
+    if text.endswith(suffix):
+        return text[:-len(suffix)]
+    return text
+
 if FILE_TYPE == idc.FT_PE:
 	IMAGEBASE = ida_nalt.get_imagebase()
 elif (FILE_TYPE == idc.FT_ELF) | (FILE_TYPE == idc.FT_MACHO):
@@ -55,17 +65,15 @@ def FormatTypeName(type_name:str) -> str:
 	type_name = type_name.replace(',', '_')
 	type_name = type_name.replace('>', '_')
 	type_name = type_name.replace('&', '_')
-	type_name = type_name.replace('?', '_')
-	type_name = type_name.replace('@', '_')
 	type_name = type_name.replace(')', '_')
 	type_name = re.sub('\\s+', '', type_name)
 	type_name = re.sub('\\(.*\\*\\)\\(.*\\)', '', type_name)
 	type_name = type_name.replace('*', '')
 	type_name = re.sub('\\_+', '_', type_name)
-	type_name = type_name.removeprefix('__')
-	type_name = type_name.removeprefix('_')
-	type_name = type_name.removesuffix('__')
-	type_name = type_name.removesuffix('_')
+	type_name = removeprefix(type_name, '__')
+	type_name = removeprefix(type_name, '_')
+	type_name = removesuffix(type_name, '__')
+	type_name = removesuffix(type_name, '_')
 	return type_name
 
 def FixDubTypes(types, known_types = None):
@@ -103,7 +111,7 @@ def SearchBaseTypes(search_type:int, main_type:int = 0):
 				continue
 
 			number_of_bases = ida_bytes.get_dword(search_type_ref_address + 4)
-			if number_of_bases == 0:
+			if (number_of_bases == 0) | (number_of_bases > 0x4000):
 				continue
 
 			if IS_64:
@@ -460,9 +468,7 @@ def DecompileVirtualTablesFunctions(tables, declare, include):
 					args = [ decompiled_function.type.get_nth_arg(x) for x in range(1, decompiled_function.type.get_nargs()) ]
 
 					end_return_type = GetEndType(decompiled_function.type.get_rettype())
-					if end_return_type.is_func() | (end_return_type.is_int128() & decompiled_function.type.get_rettype().is_ptr()):
-						return_type = 'void*'
-					elif end_return_type.is_sse_type():
+					if end_return_type.is_func() | ((end_return_type.is_int128() | end_return_type.is_sse_type()) & decompiled_function.type.get_rettype().is_ptr()):
 						return_type = 'void*'
 
 					return_type = '*'.join(return_type.rsplit(' *'))
@@ -576,7 +582,7 @@ def DecompileVirtualTablesFunctions(tables, declare, include):
 					func_args = []
 
 					#if function_type_args:
-					if FILE_TYPE == idc.FT_PE and function_type_args:
+					if 0:
 						function_string += function_type_args + ') = 0;'
 					else:
 						for i, arg in enumerate(args):
@@ -588,8 +594,6 @@ def DecompileVirtualTablesFunctions(tables, declare, include):
 
 							end_arg_type = GetEndType(arg)
 							if end_arg_type.is_func() | ((end_arg_type.is_int128() | end_arg_type.is_sse_type()) & arg.is_ptr()):
-								arg_type = 'void*'
-							elif end_arg_type.is_sse_type():
 								arg_type = 'void*'
 
 							arg_type = '*'.join(arg_type.rsplit(' *'))
@@ -697,7 +701,7 @@ class VirtualTableDump(ida_idaapi.plugin_t):
 	def term(self):
 		pass
 
-	def run(self, arg = None):
+	def run(self, arg):
 		if ida_auto.auto_is_ok() != True:
 			idc.msg('[VirtualTableDump] Error: The analysis is not finished!\n')
 			return
@@ -825,4 +829,4 @@ if __name__ == '__main__':
 		if ida_pro.IDA_SDK_VERSION < 770:
 			idc.msg('[VirtualTableDump] Error: Optimal IDA version is 7.7\n')
 		else:
-			VirtualTableDump().run()
+			VirtualTableDump().run(0)
